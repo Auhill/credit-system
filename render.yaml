@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: personal-credit-system
+    runtime: node
+    plan: starter          # 注意：Render 持久磁盘需要 starter 及以上付费套餐（免费版无磁盘，数据不持久）
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/overview
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: ACCESS_CODE
+        sync: false         # 部署后在 Render 面板里手动填写（建议改成你自己的验证码）
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: DATA_DIR
+        value: /var/data     # 指向下方的持久磁盘挂载点
+    disk:
+      name: credit-data
+      mountPath: /var/data
+      sizeGB: 1

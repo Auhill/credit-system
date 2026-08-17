@@ -1,7 +1,7 @@
 # 个人 Credit 系统
 
 本地运行的任务奖励 / 消耗积分平台。完成任务赚取 Credit，用 Credit 兑换想做的事。
-带登录验证码，可部署到公网（如 Vercel）防止他人随意使用。
+带登录验证码，可部署到公网防止他人随意使用。推荐部署到 **Railway / Render** 等支持持久磁盘的平台，数据可长期保存。
 
 ## 运行（本地）
 
@@ -27,22 +27,47 @@ PORT=8080 node server.js   # 自定义端口
   SESSION_SECRET=一段随机字符串   # 用于签发登录 Cookie
   ```
 
-## 部署到 Vercel
+## 部署（Railway / Render，数据可持久化）
 
-项目已做 Vercel 兼容处理（`api/index.js` 作为 serverless 入口，`vercel.json` 已配置）。
+当前架构是常驻 Node 进程 + `data/data.json`，天然契合 Railway / Render。
+关键：通过环境变量 `DATA_DIR` 把数据目录指向平台挂载的**持久磁盘**，数据就不会随重启丢失。
+
+### 方式 A：Railway
+
+1. 在 [railway.app](https://railway.app) 注册并新建 Project → **Deploy from GitHub repo**（先确保代码已 push 到 GitHub）。
+2. 在 Project 里 **Add Volume**（如挂载到 `/data`）。
+3. 设置环境变量：`DATA_DIR=/data`、`ACCESS_CODE=你的验证码`、`SESSION_SECRET=随机串`。
+4. 部署完成，Railway 会自动 `npm install && npm start`。
+
+配置已就绪：`railway.json`（构建/启动命令）。也可本地 CLI 部署：
+```bash
+npm i -g railway
+railway login
+railway link
+railway up
+```
+
+### 方式 B：Render
+
+1. 在 [render.com](https://render.com) 新建 **Web Service** → 关联 GitHub 仓库。
+2. 配置：`Build Command = npm install`，`Start Command = npm start`。
+3. 在 **Advanced** 里 **Add Disk**：名称随意，Mount Path 填 `/var/data`，大小 1 GB。
+4. 设置环境变量：`DATA_DIR=/var/data`、`ACCESS_CODE=你的验证码`（其余见 `render.yaml` 已自动生成）。
+5. 部署完成即可访问。
+
+> ⚠️ **Render 磁盘注意**：持久磁盘需要 **Starter 及以上付费套餐**（免费版无磁盘，数据仍会随部署重置）。
+> 若只用免费版，请改用 Railway，或自行外接对象存储。
+
+### （可选）部署到 Vercel
+
+项目已做 Vercel 兼容（`api/index.js` serverless 入口 + `vercel.json`）。但 Vercel 是无状态环境，
+`data/data.json` 会回退到 `/tmp`，**数据不保证持久化**。仅在「临时演示、不关心数据」时使用：
 
 ```bash
-npm i -g vercel
-vercel login
-vercel --prod
+npm i -g vercel && vercel login && vercel --prod
 ```
 
 部署后在 Vercel 环境变量中添加 `ACCESS_CODE` 与 `SESSION_SECRET`。
-
-> ⚠️ **数据持久化注意**：Vercel 是无状态 serverless 环境，本地用 `data/data.json` 存储，
-> 在 Vercel 上会回退到 `/tmp`，**数据不保证持久化**（重启/扩容可能丢失）。
-> 如需在 Vercel 上长久保存数据，请接入 Vercel KV / Postgres；
-> 或改用 **Railway / Render / Fly.io** 等支持常驻进程 + 持久磁盘的平台（当前架构无需改动即可运行）。
 
 ## 功能
 

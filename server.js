@@ -6,8 +6,9 @@ const crypto = require('crypto');
 const app = express();
 const ROOT = __dirname;
 const IS_VERCEL = !!process.env.VERCEL;
-// Vercel 是无状态 serverless：本地用项目内 data/，部署环境回退到 /tmp（注意：/tmp 不保证持久化）
-const DATA_DIR = IS_VERCEL ? '/tmp' : path.join(ROOT, 'data');
+// 数据目录优先级：环境变量 DATA_DIR > Vercel(/tmp) > 本地项目内 data/
+// 部署到 Railway/Render 时，把 DATA_DIR 指向挂载的持久磁盘路径即可保证数据不丢
+const DATA_DIR = process.env.DATA_DIR || (IS_VERCEL ? '/tmp' : path.join(ROOT, 'data'));
 const DATA_FILE = path.join(DATA_DIR, 'data.json');
 const SEED_FILE = path.join(ROOT, 'seed.json');
 
