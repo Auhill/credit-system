@@ -1,0 +1,13 @@
+{
+  "name": "personal-credit-system",
+  "version": "1.0.0",
+  "description": "个人 Credit 系统：本地运行的任务奖励与消耗积分平台",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "chart.js": "^4.5.1",
+    "express": "^4.19.2"
+  }
+}

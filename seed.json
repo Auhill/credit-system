@@ -1,0 +1,30 @@
+{
+  "categories": [
+    { "name": "杂事", "color": "#6366F1" },
+    { "name": "工作", "color": "#0EA5E9" },
+    { "name": "学习", "color": "#10B981" },
+    { "name": "健康", "color": "#F59E0B" }
+  ],
+  "tasks": [
+    { "title": "完成杂事1", "category": "杂事", "credit": 200 },
+    { "title": "整理书桌", "category": "杂事", "credit": 100 },
+    { "title": "写周报", "category": "工作", "credit": 150 },
+    { "title": "回复邮件", "category": "工作", "credit": 80 },
+    { "title": "读书30分钟", "category": "学习", "credit": 120 },
+    { "title": "背20个单词", "category": "学习", "credit": 60 },
+    { "title": "跑步5公里", "category": "健康", "credit": 100 },
+    { "title": "做拉伸", "category": "健康", "credit": 50 }
+  ],
+  "rewards": [
+    { "name": "附近旅游", "desc": "周末周边游放松一下", "cost": 500, "icon": "🏖️" },
+    { "name": "看一场电影", "desc": "院线新片安排上", "cost": 200, "icon": "🎬" },
+    { "name": "吃顿好的", "desc": "犒劳辛苦的自己", "cost": 300, "icon": "🍲" },
+    { "name": "买本喜欢的书", "desc": "任意一本都行", "cost": 150, "icon": "📚" },
+    { "name": "睡个懒觉", "desc": "周末多睡一小时", "cost": 100, "icon": "😴" }
+  ],
+  "ledger": [
+    { "type": "earn", "amount": 200, "reason": "完成: 倒垃圾", "daysAgo": 6 },
+    { "type": "earn", "amount": 150, "reason": "完成: 健身打卡", "daysAgo": 4 },
+    { "type": "spend", "amount": 300, "reason": "兑换: 吃顿好的", "daysAgo": 2 }
+  ]
+}

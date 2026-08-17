@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>个人 Credit 系统</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-logo">💎</span>
+        <span class="brand-name">Credit</span>
+      </div>
+      <nav class="nav">
+        <a href="#/dashboard" data-route="#/dashboard" class="nav-item">📊 总览</a>
+        <a href="#/tasks" data-route="#/tasks" class="nav-item">✅ 任务</a>
+        <a href="#/rewards" data-route="#/rewards" class="nav-item">🎁 奖励</a>
+        <a href="#/history" data-route="#/history" class="nav-item">🧾 历史</a>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="balance-mini">
+          <span class="balance-mini-label">当前 Credit</span>
+          <span class="balance-mini-value" id="sidebarBalance">0</span>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="logoutBtn" style="width:100%; margin-top:10px; color:#fff; opacity:.85; display:none;">退出登录</button>
+      </div>
+    </aside>
+
+    <main class="content" id="app">
+      <div class="loading">加载中…</div>
+    </main>
+  </div>
+
+  <div id="toastWrap" class="toast-wrap"></div>
+
+  <script src="lib/chart.umd.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/views/dashboard.js"></script>
+  <script src="js/views/tasks.js"></script>
+  <script src="js/views/rewards.js"></script>
+  <script src="js/views/history.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
