@@ -22,9 +22,5 @@
     { "name": "买本喜欢的书", "desc": "任意一本都行", "cost": 150, "icon": "📚" },
     { "name": "睡个懒觉", "desc": "周末多睡一小时", "cost": 100, "icon": "😴" }
   ],
-  "ledger": [
-    { "type": "earn", "amount": 200, "reason": "完成: 倒垃圾", "daysAgo": 6 },
-    { "type": "earn", "amount": 150, "reason": "完成: 健身打卡", "daysAgo": 4 },
-    { "type": "spend", "amount": 300, "reason": "兑换: 吃顿好的", "daysAgo": 2 }
-  ]
+  "ledger": []
 }
