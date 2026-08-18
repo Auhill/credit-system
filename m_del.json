@@ -1,1 +1,0 @@
-{"query":"mutation($e:String!,$id:String!){ serviceDelete(environmentId:$e, id:$id) }","variables":{"e":"2417c921-5ab2-4110-b238-4bf55b851705","id":"d31d5230-07ee-40b6-8368-523e235643c1"}}

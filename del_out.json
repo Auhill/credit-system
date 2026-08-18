@@ -1,1 +1,0 @@
-{"errors":[{"message":"Field \"serviceDelete\" must not have a selection since type \"Boolean!\" has no subfields.","locations":[{"line":1,"column":74}],"extensions":{"code":"GRAPHQL_VALIDATION_FAILED"},"traceId":"8396473352196653364"}]}

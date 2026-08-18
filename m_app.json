@@ -1,1 +1,0 @@
-{"query":"mutation($i: ServiceCreateInput!){ serviceCreate(input:$i){ id name } }","variables":{"i":{"projectId":"06f40b1d-42ff-4fda-b945-8b75e6326d5c","environmentId":"2417c921-5ab2-4110-b238-4bf55b851705","name":"credit-app"}}}

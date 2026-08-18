@@ -1,1 +1,0 @@
-{"query":"{ __schema { mutationType { fields( filter: { name: \"serviceCreate\" } ) { name args { name type { name kind ofType { name kind fields { name type { name kind ofType { name } } } } } } } } } }"}

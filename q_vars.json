@@ -1,1 +1,0 @@
-{"query":"{ project(id:\"06f40b1d-42ff-4fda-b945-8b75e6326d5c\"){ services { edges { node { id name variables { edges { node { name value } } } } } } } }"}
