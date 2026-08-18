@@ -21,7 +21,10 @@ if (DATABASE_URL) {
   const { Pool } = require('pg');
   pool = new Pool({
     connectionString: DATABASE_URL,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+    // 仅当连接串要求 sslmode=require 或显式 PGSSL=true 时启用 SSL（内网 postgres 不支持 SSL）
+    ssl: (/[?&]sslmode=require/.test(DATABASE_URL) || process.env.PGSSL === 'true')
+      ? { rejectUnauthorized: false }
+      : false,
     max: 5,
   });
 }
