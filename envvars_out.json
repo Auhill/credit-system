@@ -1,0 +1,1 @@
+{"errors":[{"message":"Cannot query field \"value\" on type \"Variable\". Did you mean \"name\"?","locations":[{"line":1,"column":125}],"extensions":{"code":"GRAPHQL_VALIDATION_FAILED"},"traceId":"4441817640762529071"}]}

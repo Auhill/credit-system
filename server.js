@@ -178,8 +178,13 @@ app.use((req, res, next) => {
   req.cookies = parseCookies(req);
   next();
 });
+// 健康检查端点（无需认证，供 Railway/Render 等平台探测）
+app.get('/api/health', (req, res) => {
+  res.json({ ok: true, ts: Date.now() });
+});
+
 app.use('/api', (req, res, next) => {
-  if (req.path === '/login') return next();
+  if (req.path === '/login' || req.path === '/health') return next();
   if (verifyToken(req.cookies.credit_auth)) return next();
   return res.status(401).json({ error: '未登录或验证码已失效', code: 'UNAUTHENTICATED' });
 });

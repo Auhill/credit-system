@@ -1,0 +1,1 @@
+{"query":"{ __type(name:\"VariableUpsertInput\"){ name inputFields { name type { name kind ofType { name } } } } }"}

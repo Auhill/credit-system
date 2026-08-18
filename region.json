@@ -1,0 +1,1 @@
+{"errors":[{"message":"Cannot query field \"region\" on type \"Project\".","locations":[{"line":1,"column":58}],"extensions":{"code":"GRAPHQL_VALIDATION_FAILED"},"traceId":"2300474655683383392"},{"message":"Cannot query field \"region\" on type \"Service\".","locations":[{"line":1,"column":99}],"extensions":{"code":"GRAPHQL_VALIDATION_FAILED"},"traceId":"2300474655683383392"}]}

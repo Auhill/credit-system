@@ -1,0 +1,1 @@
+{"errors":[{"message":"Unknown argument \"filter\" on field \"__Type.fields\".","locations":[{"line":1,"column":37}],"extensions":{"code":"GRAPHQL_VALIDATION_FAILED"},"traceId":"1195556139702184605"}]}

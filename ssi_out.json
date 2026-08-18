@@ -1,0 +1,1 @@
+{"data":{"__type":{"name":"ServiceSourceInput","inputFields":[{"name":"image","type":{"name":"String","kind":"SCALAR","ofType":null}},{"name":"repo","type":{"name":"String","kind":"SCALAR","ofType":null}}]}}}
