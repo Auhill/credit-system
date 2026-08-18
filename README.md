@@ -29,34 +29,40 @@ PORT=8080 node server.js   # 自定义端口
 
 ## 部署（Railway / Render，数据可持久化）
 
-当前架构是常驻 Node 进程 + `data/data.json`，天然契合 Railway / Render。
-关键：通过环境变量 `DATA_DIR` 把数据目录指向平台挂载的**持久磁盘**，数据就不会随重启丢失。
+后端存储层支持两种后端（由环境变量自动切换）：
+- **Postgres（推荐，线上）**：设置 `DATABASE_URL` 后，数据落入 Postgres 的 `state` 表（JSONB），彻底持久化、不怕重启。
+- **本地 JSON 文件（默认，本地）**：未设置 `DATABASE_URL` 时，使用 `data/data.json`，适合本地开发。
 
-### 方式 A：Railway
+### 方式 A：Railway（推荐，Postgres 持久化）
 
-1. 在 [railway.app](https://railway.app) 注册并新建 Project → **Deploy from GitHub repo**（先确保代码已 push 到 GitHub）。
-2. 在 Project 里 **Add Volume**（如挂载到 `/data`）。
-3. 设置环境变量：`DATA_DIR=/data`、`ACCESS_CODE=你的验证码`、`SESSION_SECRET=随机串`。
-4. 部署完成，Railway 会自动 `npm install && npm start`。
+Railway 自带 Postgres 插件，部署时一键挂载托管数据库，数据落到云端、永久保存。
 
-配置已就绪：`railway.json`（构建/启动命令）。也可本地 CLI 部署：
 ```bash
-npm i -g railway
+# 1. 登录（浏览器授权）
 railway login
-railway link
-railway up
+# 2. 新建项目并关联当前目录
+railway init --name credit-system
+# 3. 添加 Postgres 插件（自动注入 DATABASE_URL 环境变量）
+railway add -d postgres
+# 4. 设置登录验证码等环境变量
+railway variable set ACCESS_CODE=你的强验证码 SESSION_SECRET=一段随机串
+# 5. 部署
+railway up -y
 ```
+
+配置已就绪：`railway.json`（构建/启动命令）。首次启动会自动建表并按 `seed.json` 初始化。
+
+> 注：Railway 的 Postgres 插件按用量计费；免费试用额度可跑起来，长期稳定请绑卡。
+> 若不想用 Railway 的数据库，也可把 `DATABASE_URL` 指向任意外部 Postgres（如 Neon / Supabase 免费库）。
 
 ### 方式 B：Render
 
 1. 在 [render.com](https://render.com) 新建 **Web Service** → 关联 GitHub 仓库。
 2. 配置：`Build Command = npm install`，`Start Command = npm start`。
-3. 在 **Advanced** 里 **Add Disk**：名称随意，Mount Path 填 `/var/data`，大小 1 GB。
-4. 设置环境变量：`DATA_DIR=/var/data`、`ACCESS_CODE=你的验证码`（其余见 `render.yaml` 已自动生成）。
-5. 部署完成即可访问。
+3. 在 **Advanced** 里添加环境变量：`DATABASE_URL`（指向你的 Postgres，如 Supabase 免费库）、`ACCESS_CODE`、`SESSION_SECRET`。
+4. 部署完成即可访问。
 
-> ⚠️ **Render 磁盘注意**：持久磁盘需要 **Starter 及以上付费套餐**（免费版无磁盘，数据仍会随部署重置）。
-> 若只用免费版，请改用 Railway，或自行外接对象存储。
+> 没有 Postgres 也可只用本地 JSON：但 Render 免费版文件系统是临时的，**数据会随部署重置**，仅适合演示。
 
 ### （可选）部署到 Vercel
 
@@ -78,9 +84,10 @@ npm i -g vercel && vercel login && vercel --prod
 
 ## 数据
 
-- 存储文件：`data/data.json`（JSON，单人本地）
-- 总 Credit = 所有流水（ledger）金额之和（earn 为正、spend 为负），单一真相来源
+- **线上（Postgres）**：数据存于 `DATABASE_URL` 指向的数据库 `state` 表（单行长 JSONB），首次启动自动建表并按 `seed.json` 初始化。
+- **本地（JSON）**：未设置 `DATABASE_URL` 时使用 `data/data.json`。
+- 总 Credit = 所有流水（ledger）金额之和（earn 为正、spend 为负），单一真相来源。
 
 ## 技术栈
 
-Node.js + Express（后端，JSON 文件持久化） · 原生 HTML/CSS/JS（前端，无构建） · Chart.js（图表）
+Node.js + Express（后端，Postgres / JSON 双存储） · 原生 HTML/CSS/JS（前端，无构建） · Chart.js（图表） · `pg` 驱动

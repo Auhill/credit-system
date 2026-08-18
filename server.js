@@ -5,10 +5,7 @@ const crypto = require('crypto');
 
 const app = express();
 const ROOT = __dirname;
-const IS_VERCEL = !!process.env.VERCEL;
-// 数据目录优先级：环境变量 DATA_DIR > Vercel(/tmp) > 本地项目内 data/
-// 部署到 Railway/Render 时，把 DATA_DIR 指向挂载的持久磁盘路径即可保证数据不丢
-const DATA_DIR = process.env.DATA_DIR || (IS_VERCEL ? '/tmp' : path.join(ROOT, 'data'));
+const DATA_DIR = process.env.DATA_DIR || path.join(ROOT, 'data');
 const DATA_FILE = path.join(DATA_DIR, 'data.json');
 const SEED_FILE = path.join(ROOT, 'seed.json');
 
@@ -16,6 +13,21 @@ const SEED_FILE = path.join(ROOT, 'seed.json');
 // 默认 "lastdance"，可用环境变量 ACCESS_CODE 覆盖
 const ACCESS_CODE = process.env.ACCESS_CODE || 'lastdance';
 const SESSION_SECRET = process.env.SESSION_SECRET || 'credit-default-secret';
+
+// ---- 存储层：优先 Postgres（DATABASE_URL），否则回退本地 JSON 文件 ----
+const DATABASE_URL = process.env.DATABASE_URL || null;
+let pool = null;
+if (DATABASE_URL) {
+  const { Pool } = require('pg');
+  pool = new Pool({
+    connectionString: DATABASE_URL,
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+    max: 5,
+  });
+}
+
+// 内存工作副本，所有请求直接读写它；持久化由 persist() 负责
+let DATA = null;
 
 function signToken() {
   const payload = Buffer.from(JSON.stringify({ t: Date.now() })).toString('base64url');
@@ -43,48 +55,21 @@ function parseCookies(req) {
   });
   return out;
 }
-
-app.use(express.json());
-app.use(express.static(path.join(ROOT, 'public')));
-
-// 解析 cookie + 校验登录态（/api/login 除外）
-app.use((req, res, next) => {
-  req.cookies = parseCookies(req);
-  next();
-});
-app.use('/api', (req, res, next) => {
-  if (req.path === '/login') return next();
-  if (verifyToken(req.cookies.credit_auth)) return next();
-  return res.status(401).json({ error: '未登录或验证码已失效', code: 'UNAUTHENTICATED' });
-});
-
-app.post('/api/login', (req, res) => {
-  const { code } = req.body || {};
-  if (!code || code !== ACCESS_CODE) {
-    return res.status(401).json({ error: '验证码错误' });
-  }
-  res.cookie('credit_auth', signToken(), {
-    httpOnly: true,
-    sameSite: 'lax',
-    maxAge: 1000 * 60 * 60 * 24 * 30,
-  });
-  res.json({ ok: true });
-});
-
-app.post('/api/logout', (req, res) => {
-  res.clearCookie('credit_auth');
-  res.json({ ok: true });
-});
-
-function ensureDir() {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-}
-
 function nowISO() {
   return new Date().toISOString();
 }
 
-// 首次启动：从 seed.json 生成 data.json，并用最新时间补全日期字段
+// ---- 种子数据：从 seed.json 生成初始结构 ----
+function loadSeedFile() {
+  if (fs.existsSync(SEED_FILE)) {
+    try {
+      return JSON.parse(fs.readFileSync(SEED_FILE, 'utf-8'));
+    } catch (e) {
+      return null;
+    }
+  }
+  return null;
+}
 function buildSeed(seed) {
   const s = seed || {};
   const cats = (s.categories || []).map((c, i) => ({
@@ -125,83 +110,142 @@ function buildSeed(seed) {
   return { categories: cats, tasks, rewards, ledger };
 }
 
-function loadData() {
-  ensureDir();
+// ---- 持久化 ----
+async function persist() {
+  if (pool) {
+    await pool.query('UPDATE state SET data = $1 WHERE id = 1', [DATA]);
+  } else {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(DATA_FILE, JSON.stringify(DATA, null, 2));
+  }
+}
+
+function loadDataFile() {
+  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
   if (!fs.existsSync(DATA_FILE)) {
-    let seed = null;
-    if (fs.existsSync(SEED_FILE)) {
-      try {
-        seed = JSON.parse(fs.readFileSync(SEED_FILE, 'utf-8'));
-      } catch (e) {
-        seed = null;
-      }
-    }
-    fs.writeFileSync(DATA_FILE, JSON.stringify(buildSeed(seed), null, 2));
+    fs.writeFileSync(DATA_FILE, JSON.stringify(buildSeed(loadSeedFile()), null, 2));
   }
   return JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
 }
 
-function saveData(data) {
-  ensureDir();
-  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+let storeReady = null;
+function ensureStore() {
+  if (!storeReady) storeReady = initStore();
+  return storeReady;
+}
+async function initStore() {
+  if (pool) {
+    await pool.query(
+      'CREATE TABLE IF NOT EXISTS state (id INT PRIMARY KEY, data JSONB NOT NULL)'
+    );
+    const res = await pool.query('SELECT data FROM state WHERE id = 1');
+    if (res.rows.length) {
+      DATA = res.rows[0].data;
+    } else {
+      const seeded = buildSeed(loadSeedFile());
+      await pool.query('INSERT INTO state (id, data) VALUES (1, $1)', [seeded]);
+      DATA = seeded;
+    }
+    return;
+  }
+  DATA = loadDataFile();
 }
 
+// ---- 业务辅助 ----
 function balance(data) {
   return data.ledger.reduce((sum, e) => sum + (e.type === 'earn' ? e.amount : -e.amount), 0);
 }
-
 function nextId(arr) {
   return arr.length ? Math.max(...arr.map((x) => x.id)) + 1 : 1;
 }
 
-// ---------------- API ----------------
+// ---------------- 中间件 ----------------
+app.use(express.json());
+app.use(express.static(path.join(ROOT, 'public')));
 
+// 初始化存储（首次请求或启动时）
+app.use(async (req, res, next) => {
+  try {
+    await ensureStore();
+    next();
+  } catch (e) {
+    console.error('storage init failed:', e);
+    res.status(500).json({ error: '存储初始化失败' });
+  }
+});
+
+app.use((req, res, next) => {
+  req.cookies = parseCookies(req);
+  next();
+});
+app.use('/api', (req, res, next) => {
+  if (req.path === '/login') return next();
+  if (verifyToken(req.cookies.credit_auth)) return next();
+  return res.status(401).json({ error: '未登录或验证码已失效', code: 'UNAUTHENTICATED' });
+});
+
+// ---------------- 认证 ----------------
+app.post('/api/login', (req, res) => {
+  const { code } = req.body || {};
+  if (!code || code !== ACCESS_CODE) {
+    return res.status(401).json({ error: '验证码错误' });
+  }
+  res.cookie('credit_auth', signToken(), {
+    httpOnly: true,
+    sameSite: 'lax',
+    maxAge: 1000 * 60 * 60 * 24 * 30,
+  });
+  res.json({ ok: true });
+});
+app.post('/api/logout', (req, res) => {
+  res.clearCookie('credit_auth');
+  res.json({ ok: true });
+});
+
+// ---------------- API ----------------
 app.get('/api/overview', (req, res) => {
-  const data = loadData();
-  const completed = data.tasks.filter((t) => t.status === 'completed').length;
-  const pending = data.tasks.filter((t) => t.status === 'pending').length;
-  const earn = data.ledger.filter((e) => e.type === 'earn').reduce((s, e) => s + e.amount, 0);
-  const spend = data.ledger.filter((e) => e.type === 'spend').reduce((s, e) => s + e.amount, 0);
+  const d = DATA;
+  const completed = d.tasks.filter((t) => t.status === 'completed').length;
+  const pending = d.tasks.filter((t) => t.status === 'pending').length;
+  const earn = d.ledger.filter((e) => e.type === 'earn').reduce((s, e) => s + e.amount, 0);
+  const spend = d.ledger.filter((e) => e.type === 'spend').reduce((s, e) => s + e.amount, 0);
   res.json({
-    balance: balance(data),
+    balance: balance(d),
     completed,
     pending,
     earn,
     spend,
-    taskCount: data.tasks.length,
+    taskCount: d.tasks.length,
   });
 });
 
 // 分类
-app.get('/api/categories', (req, res) => res.json(loadData().categories));
-app.post('/api/categories', (req, res) => {
-  const data = loadData();
+app.get('/api/categories', (req, res) => res.json(DATA.categories));
+app.post('/api/categories', async (req, res) => {
   const { name, color } = req.body || {};
   if (!name) return res.status(400).json({ error: '分类名称不能为空' });
-  const cat = { id: nextId(data.categories), name, color: color || '#6366F1' };
-  data.categories.push(cat);
-  saveData(data);
+  const cat = { id: nextId(DATA.categories), name, color: color || '#6366F1' };
+  DATA.categories.push(cat);
+  await persist();
   res.json(cat);
 });
-app.delete('/api/categories/:id', (req, res) => {
-  const data = loadData();
+app.delete('/api/categories/:id', async (req, res) => {
   const id = Number(req.params.id);
-  if (data.tasks.some((t) => t.categoryId === id)) {
+  if (DATA.tasks.some((t) => t.categoryId === id)) {
     return res.status(400).json({ error: '该分类下还有任务，无法删除' });
   }
-  data.categories = data.categories.filter((c) => c.id !== id);
-  saveData(data);
+  DATA.categories = DATA.categories.filter((c) => c.id !== id);
+  await persist();
   res.json({ ok: true });
 });
 
 // 任务
-app.get('/api/tasks', (req, res) => res.json(loadData().tasks));
-app.post('/api/tasks', (req, res) => {
-  const data = loadData();
+app.get('/api/tasks', (req, res) => res.json(DATA.tasks));
+app.post('/api/tasks', async (req, res) => {
   const { title, categoryId, credit } = req.body || {};
   if (!title) return res.status(400).json({ error: '任务标题不能为空' });
   const task = {
-    id: nextId(data.tasks),
+    id: nextId(DATA.tasks),
     title,
     categoryId: categoryId || null,
     credit: Number(credit) || 0,
@@ -209,99 +253,91 @@ app.post('/api/tasks', (req, res) => {
     createdAt: nowISO(),
     completedAt: null,
   };
-  data.tasks.push(task);
-  saveData(data);
+  DATA.tasks.push(task);
+  await persist();
   res.json(task);
 });
-app.put('/api/tasks/:id', (req, res) => {
-  const data = loadData();
+app.put('/api/tasks/:id', async (req, res) => {
   const id = Number(req.params.id);
-  const task = data.tasks.find((t) => t.id === id);
+  const task = DATA.tasks.find((t) => t.id === id);
   if (!task) return res.status(404).json({ error: '任务不存在' });
   const { title, categoryId, credit } = req.body || {};
   if (title !== undefined) task.title = title;
   if (categoryId !== undefined) task.categoryId = categoryId || null;
   if (credit !== undefined) task.credit = Number(credit) || 0;
-  saveData(data);
+  await persist();
   res.json(task);
 });
-app.delete('/api/tasks/:id', (req, res) => {
-  const data = loadData();
+app.delete('/api/tasks/:id', async (req, res) => {
   const id = Number(req.params.id);
-  data.tasks = data.tasks.filter((t) => t.id !== id);
-  saveData(data);
+  DATA.tasks = DATA.tasks.filter((t) => t.id !== id);
+  await persist();
   res.json({ ok: true });
 });
-app.post('/api/tasks/:id/complete', (req, res) => {
-  const data = loadData();
+app.post('/api/tasks/:id/complete', async (req, res) => {
   const id = Number(req.params.id);
-  const task = data.tasks.find((t) => t.id === id);
+  const task = DATA.tasks.find((t) => t.id === id);
   if (!task) return res.status(404).json({ error: '任务不存在' });
   if (task.status === 'completed') return res.status(400).json({ error: '任务已完成' });
   task.status = 'completed';
   task.completedAt = nowISO();
-  data.ledger.push({
-    id: nextId(data.ledger),
+  DATA.ledger.push({
+    id: nextId(DATA.ledger),
     type: 'earn',
     amount: task.credit,
     reason: '完成: ' + task.title,
     refId: task.id,
     createdAt: nowISO(),
   });
-  saveData(data);
-  res.json({ task, balance: balance(data) });
+  await persist();
+  res.json({ task, balance: balance(DATA) });
 });
 
 // 奖励
-app.get('/api/rewards', (req, res) => res.json(loadData().rewards));
-app.post('/api/rewards', (req, res) => {
-  const data = loadData();
+app.get('/api/rewards', (req, res) => res.json(DATA.rewards));
+app.post('/api/rewards', async (req, res) => {
   const { name, desc, cost, icon } = req.body || {};
   if (!name) return res.status(400).json({ error: '奖励名称不能为空' });
-  const r = { id: nextId(data.rewards), name, desc: desc || '', cost: Number(cost) || 0, icon: icon || '🎁' };
-  data.rewards.push(r);
-  saveData(data);
+  const r = { id: nextId(DATA.rewards), name, desc: desc || '', cost: Number(cost) || 0, icon: icon || '🎁' };
+  DATA.rewards.push(r);
+  await persist();
   res.json(r);
 });
-app.delete('/api/rewards/:id', (req, res) => {
-  const data = loadData();
+app.delete('/api/rewards/:id', async (req, res) => {
   const id = Number(req.params.id);
-  data.rewards = data.rewards.filter((r) => r.id !== id);
-  saveData(data);
+  DATA.rewards = DATA.rewards.filter((r) => r.id !== id);
+  await persist();
   res.json({ ok: true });
 });
-app.post('/api/rewards/:id/redeem', (req, res) => {
-  const data = loadData();
+app.post('/api/rewards/:id/redeem', async (req, res) => {
   const id = Number(req.params.id);
-  const r = data.rewards.find((x) => x.id === id);
+  const r = DATA.rewards.find((x) => x.id === id);
   if (!r) return res.status(404).json({ error: '奖励不存在' });
-  const bal = balance(data);
+  const bal = balance(DATA);
   if (bal < r.cost) {
     return res.status(400).json({ error: 'Credit 不足', balance: bal, cost: r.cost });
   }
-  data.ledger.push({
-    id: nextId(data.ledger),
+  DATA.ledger.push({
+    id: nextId(DATA.ledger),
     type: 'spend',
     amount: r.cost,
     reason: '兑换: ' + r.name,
     refId: r.id,
     createdAt: nowISO(),
   });
-  saveData(data);
-  res.json({ reward: r, balance: balance(data) });
+  await persist();
+  res.json({ reward: r, balance: balance(DATA) });
 });
 
 // 流水 & 统计
 app.get('/api/transactions', (req, res) => {
-  const data = loadData();
-  const sorted = [...data.ledger].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const sorted = [...DATA.ledger].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   res.json(sorted);
 });
 app.get('/api/stats', (req, res) => {
-  const data = loadData();
   const days = 14;
   const map = {};
-  data.ledger.forEach((e) => {
+  DATA.ledger.forEach((e) => {
     const d = new Date(e.createdAt);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     if (!map[key]) map[key] = { earn: 0, spend: 0 };
@@ -321,11 +357,18 @@ app.get('/api/stats', (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 
-// 本地直接运行才监听端口；被 Vercel 作为 serverless 函数引入时不监听
 if (require.main === module) {
-  app.listen(PORT, () => {
-    console.log(`个人 Credit 系统已启动: http://localhost:${PORT}`);
-  });
+  ensureStore()
+    .then(() => {
+      app.listen(PORT, () => {
+        console.log(`个人 Credit 系统已启动: http://localhost:${PORT}`);
+        console.log(`存储后端: ${pool ? 'Postgres (DATABASE_URL)' : '本地 JSON 文件'}`);
+      });
+    })
+    .catch((err) => {
+      console.error('启动失败:', err);
+      process.exit(1);
+    });
 }
 
 module.exports = app;
